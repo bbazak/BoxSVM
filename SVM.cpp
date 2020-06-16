@@ -406,7 +406,7 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 					minss = ss;
 				}
 				count2 = 0;
-				std::cout << "i= " << i << "   NewE= " << NewE << "   minE= " << minE << std::endl;
+				//std::cout << "i= " << i << "   NewE= " << NewE << "   minE= " << minE << std::endl;
 			}
 			count1++;
 			//============================
