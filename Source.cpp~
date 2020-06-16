@@ -1,0 +1,170 @@
+
+#include "Rand.h"
+#include "Input.h"
+#include "SVM.h"
+#include "MatrixElement.h"
+
+#include <iostream>
+#include <cmath>
+#include <vector>
+#include <fstream>
+
+#include <Eigen> 
+
+#include <iomanip>
+#include <string>
+#include <stdlib.h> 
+#include <ctime> 
+#include <cstdio>
+#include <cstdlib>
+#include <stdio.h>
+
+using namespace Eigen;
+using namespace std;
+
+
+int main(int argc, char* argv[])
+{
+clock_t begin = clock();
+	string jobname;
+	if (argc < 2) { jobname = "2H_EFT"; }
+	else { jobname = argv[1]; } 
+
+/* Read and print input data */
+	Input input("./input/"+jobname+".inp");
+	input.print();
+//===========
+ifstream  srcc("./input/"+jobname+".inp");
+cout << srcc.rdbuf();
+ifstream  src("./input/"+jobname+".inp");
+ofstream  dst("./output/"+jobname+".txt");
+dst << src.rdbuf();
+dst.close();
+//===========
+//===========
+//ofstream  sta("stats.txt");
+// sta.close();
+//===========
+
+
+/* Initialize the random numbr generator */
+Rand rand(input.irand);
+
+/* Initialize SVM  */
+printf("\n\t Initialize SVM \n");
+SVM svm(rand, input);
+vector<vector<MatrixXd> > Basis;
+vector<MatrixXd> NewState;
+
+/* Loading exists basis from file */
+std::string basisFile = "./output/"+jobname+".basis";
+std::ifstream infile(basisFile);
+int existBasis=0, itr=0;
+if (infile.good()) infile >> existBasis; 
+
+if (existBasis > 0) {
+  int N = input.npar;
+  for (int i = 0; i < existBasis; i++ ){
+    vector<MatrixXd> aState;
+	  MatrixXd A = MatrixXd::Zero(N, N);
+    double aa[N];
+    for (int j = 0; j < N; j++)
+      for (int k = 0; k < N; k++)
+	      infile >> A(j,k);
+    aState.push_back(A);
+    MatrixXd B = MatrixXd::Zero(N, N);
+    for (int j = 0; j < N; j++)
+	    infile >> B(j,j);
+    aState.push_back(B);
+    MatrixXd s = MatrixXd::Zero(N, N);
+    for (int j = 0; j < N; j++)
+	    infile >> s(j,j);
+    aState.push_back(s);
+    Basis.push_back(aState);
+	  svm.UpdateNorm(Basis);
+	  svm.UpdateHamiltonian(Basis);
+  }
+  infile.close();
+  itr = Basis.size();
+  cout << "\t Existing basis is used, with " << itr << " states." << endl;
+} else {
+  cout << "\t Starting a new basis." << endl;
+  NewState = svm.FirstNewState();
+  if (NewState[0](0, 0) == 2000) {
+	  cout << "\t Finding new state with appropriate overlap failed" << endl << endl;
+	  return 0;
+	}
+  itr = 1; 
+  cout << "\t First state found." << endl;
+  Basis.push_back(NewState);
+  svm.UpdateNorm(Basis);
+  svm.UpdateHamiltonian(Basis);
+}
+
+/* start SVM iterations */
+MatrixXd Norm;
+MatrixXd H;
+MatrixXd C;
+VectorXd D;
+double E, maxE;
+double EE=0., maxEE;
+int n_accuracy=1;
+int n_dE=0;
+vector<double> dE;
+GeneralizedSelfAdjointEigenSolver<MatrixXd> ges;
+SelfAdjointEigenSolver<MatrixXd> es;
+VectorXd esD;
+
+printf("\t Starting SVM iterations\n\n");
+while (itr < input.maxbasis) {
+  svm.SaveToFile(basisFile,Basis);
+  Norm = svm.NormMatrix(Basis);
+  H    = svm.HamiltonianMatrix(Basis);
+  ges.compute(H, Norm);
+  C = ges.eigenvectors();
+  D = ges.eigenvalues();
+  E = D.minCoeff();
+  maxE = D.maxCoeff();    
+  if (itr == 1 || itr==existBasis)  EE = E + abs(E / 2);
+  dE.push_back(abs((EE - E) / E));
+  printf("\t iter = %4d     E = %14.8f    dE = %14.8f \n",itr,E,dE[itr-1]);
+  dst.open("./output/"+jobname+".txt", ios::app);
+  dst << "      itr= " << itr << "        E= " << fixed << E << endl;
+  dst.close();
+  if(dE[itr-1] > pow(10, -5)) n_accuracy=1;
+  if(dE[itr-1] < pow(10, -5)) n_accuracy++;
+  if(n_accuracy==20) break;
+  NewState = svm.NewState(Basis, C, D, E, EE);
+  if (NewState[0](0, 0) == 2000) {
+		cout << "\t Finding new state with lower energy failed" << endl << endl;
+		break;
+  }	   
+  Basis.push_back(NewState);
+  svm.UpdateNorm(Basis);
+  svm.UpdateHamiltonian(Basis);
+  EE = E; 
+  maxEE=maxE;
+  if(itr%5==0) {
+    dst.open("./output/"+jobname+".txt", ios::app);
+    dst<<"  more eigenvalues=  ";
+    cout<<"   more eigenvalues=  ";
+    for(int ii=1; ii<4; ii++) {
+      dst<<D(ii)<<"  ";
+      cout<<D(ii)<<"  ";
+    }
+    dst << endl;
+    dst.close();
+    cout << endl;
+  }
+  itr = itr + 1; 
+}
+
+clock_t end = clock();
+double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+dst.open("./output/"+jobname+".txt", ios::app);
+dst<< "time=  " << elapsed_secs << endl;
+dst.close();
+cout << "time=  " << elapsed_secs << endl;
+
+return 0;
+}
