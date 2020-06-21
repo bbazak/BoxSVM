@@ -72,6 +72,7 @@ int SVM::CheckOverlap(vector<vector<MatrixXd>> Basis)
 //=============================================================================
 double EigenValusEquation(int itr, VectorXd D, VectorXd q, double aa, double xx)
 {
+/*
 	double vv = 1;
 	double ww = 1;
 	double yy = 0;
@@ -91,6 +92,18 @@ double EigenValusEquation(int itr, VectorXd D, VectorXd q, double aa, double xx)
 	zz = (aa - xx) * vv - yy;
 
 	return zz;
+*/
+
+	double w=1.;
+    double prod=w;
+    w=w*(D(itr-1)-xx);
+	for (int j = 0; j < itr-1; j++)
+	{
+		double ww=q(j)*q(j)*prod/(D(j)-xx);
+        w=w-ww;
+	}
+ 	return w;
+
 }
 //=============================================================================
 
@@ -104,7 +117,6 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 	double NN = 0;
 
 	//create the vector of i+1 state orthogonal to all previous orthogonal eigenvectors.
-
 	for (int k1 = 0; k1 < itr; k1++)
 	{
 		for (int k2 = 0; k2 < itr; k2++)
@@ -122,7 +134,7 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 		}
 	}
 
-	//normelaize the i+1 vector  ==================================================
+	//normalize the i+1 vector  ==================================================
 	for (int k1 = 0; k1 < itr + 1; k1++)
 	{
 		for (int k2 = 0; k2 < itr + 1; k2++)
@@ -135,7 +147,7 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 		c(k1) = c(k1) / sqrt(NN);
 	}
 
-	//create the matrix element of i+1 vector with all prvius ortogonal eigenvectors.
+	//create the matrix elements of i+1 vector with all previous orthogonal eigenvectors.
 	for (int k1 = 0; k1 < itr; k1++)
 	{
 		for (int k2 = 0; k2 < itr; k2++)
@@ -155,7 +167,135 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 	}
 
 	//solving the equation for the new eigenvalue===============================================
+	// from NAG, p01aaf, mark 7 revised (dec 1978)
 	int count = 0;
+    double x1, x2, x3, acc=1.e-8, g1, g2, g3;
+	x1 =  E; g1 = 1./EigenValusEquation(itr, D, q, aa, x1);
+	x3 = E - abs(E - EE); g3 = 1./EigenValusEquation(itr, D, q, aa, x3);
+	while (count++<100 && g1 * g2 > 0) 
+	{
+		x1 =  x3; g1 = g3; 
+		x3 = x1 - abs(E - EE); g3 = 1./EigenValusEquation(itr, D, q, aa, x2);
+	}
+	x2 = 0.5*(x1+x3); g2 =  1./EigenValusEquation(itr, D, q, aa, x2);
+	for (int ifu = 0; ifu < 300; ifu++)
+	{
+		//cout << ifu << ". x1: " << x1 << " g1: " << g1 
+		//	 << " x2: " << x2 << " g2: " << g2 
+		//	 << " x3: " << x3 << " g3: " << g3 << endl;
+        int ic1=1;
+     	int ic2=1;
+        if ((g1<0 && g2<0) || (g1>0 && g2>0)) ic1=0;
+        if ((g2<0 && g3<0) || (g2>0 && g3>0)) ic2=0;
+		// no root in the interval
+        if (ic1+ic2==0) 
+		{
+        	//  if(ifu.eq.1) ifa=1
+        	return x1;
+		}
+        double x12=x1-x2;
+        double x23=x2-x3;
+		double x13=x1-x3;
+        double www=g1*x23-g2*x13+g3*x12;
+        double x4=1.e30;
+        if(www!=0.) 
+             x4=(g1*x1*x23-g2*x2*x13+g3*x3*x12)/www;
+		// check bounds
+		// bisection
+        if(ic1==1) 
+		{
+        	if(x4<x1 || x4>x2) 
+			{
+         		double xx=x2;
+         		x3=x2;
+         		g3=g2;
+         		x2=0.5*(x1+xx);
+         		double f2=EigenValusEquation(itr, D, q, aa, x2);
+         		if(abs(f2)<acc) 
+					return x2;
+				g2=1./f2;
+			}
+         	else
+			{
+         		double xx=x2;
+         		x3=x2;
+         		g3=g2;
+         		x2=x4;
+				double f2=EigenValusEquation(itr, D, q, aa, x2);
+				if(abs(f2)<acc)
+					return x2;
+				g2=1./f2;
+			}
+        }
+        if(ic2==1)
+		{
+        	if(x4<x2 || x4>x3)
+			{
+				x1=x2;
+         		g1=g2;
+         		x2=0.5*(x2+x3);
+				double f2=EigenValusEquation(itr, D, q, aa, x2);
+				if(abs(f2)<acc)
+					return x2;
+				g2=1./f2;
+			}
+         	else
+			{
+        		x1=x2;
+         		g1=g2;
+         		x2=x4;
+		 		double f2=EigenValusEquation(itr, D, q, aa, x2);
+				if(abs(f2)<acc)
+					return x2;
+		        g2=1./f2;
+			}
+		}
+		if(abs(x4-x3)<acc) 
+			return x4;
+	}
+	return x1;
+/*  
+	int count = 0;
+    double xm, x0, fx0, x1, x2, eps=1.e-12, fx1, fx2;
+	x1 =  E; fx1 = EigenValusEquation(itr, D, q, aa, x1);
+	x2 = E - abs(E - EE); fx2 = EigenValusEquation(itr, D, q, aa, x2);
+	cout << count << ". x1: " << x1 << " fx1: " << fx1 << " x2: " << x2 << " fx2: " << fx2 << endl;
+	while (count++<100 && fx1 * fx2 > 0) { 
+		x1 =  x2; fx1 = fx2; 
+		x2 = x1 - abs(E - EE); fx2 = EigenValusEquation(itr, D, q, aa, x2);
+		cout << count << "; x1: " << x1 << " fx1: " << fx1 << " x2: " << x2 << " fx2: " << fx2 << endl;
+	}
+    if (fx1 * fx2 < 0) { 
+        do {
+			// calculate the intermediate value
+			x0 = (x1 * fx2 - x2 * fx1) / (fx2 - fx1); 
+  
+            // check if x0 is root of equation or not 
+			fx0 = EigenValusEquation(itr, D, q, aa, x0); 
+  
+            // update the value of interval 
+            x1 = x2; fx1 = fx2; 
+            x2 = x0; fx2 = fx0;
+			cout << count << ": x1: " << x1 << " fx1: " << fx1 << " x2: " << x2 << " fx2: " << fx2 << endl;
+  
+            // update number of iteration 
+            count++; 
+  
+            // if x0 is the root of equation then break the loop 
+            if (fx0 == 0) 
+                break; 
+			
+            xm = (x1 * fx2 - x2 * fx1) / (fx2 - fx1); 
+        } while (fabs(xm - x0) >= eps); // repeat the loop until the convergence 
+  
+        cout << "Root of the given equation=" << x0 << endl; 
+    } else
+        cout << "Can not find a root in the given inteval" << endl; 
+	
+	return x0;
+*/
+
+	/* int count = 0;
 	double e1 = E;
 	double e2 = E - abs(0.5 * (E - EE));
 	double e3 = E;
@@ -173,7 +313,7 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 		}
 	}
 	//std::cout  << "counter= " << count << std::endl;
-	//if (count > 100)  std::cout << "finding root lees then the last fail " << std::endl;
+	//if (count > 100)  std::cout << "finding root less then the last fail " << std::endl;
 	if (count <= 100)
 	{
 		count = 0;
@@ -192,7 +332,7 @@ double SVM::NewEnergy(vector<vector<MatrixXd>> Basis, MatrixXd C, VectorXd D, do
 		}
 		//	std::cout << std::endl;
 	}
-	return e3;
+	return e3; */
 }
 //=============================================================================
 MatrixXd SVM::Dmatrix()
@@ -398,15 +538,17 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 				NewE = NewEnergy(Basis, C, D, E, EE);
 				if (NewE < minE)
 				{
-					minE = NewE;
 					xx = 1;
 					State = NewState;
 					mind = d;
 					mindd = dd;
 					minss = ss;
-				}
+					//std::cout << "Lower energy!" << "   dE= " << std::scientific << NewE-E << std::endl;
+					minE = NewE;
+				}	
+				else
+					//std::cout << "counter = " << count1 << "   dE= " << std::scientific << NewE-E << std::endl;
 				count2 = 0;
-				//std::cout << "i= " << i << "   NewE= " << NewE << "   minE= " << minE << std::endl;
 			}
 			count1++;
 			//============================
@@ -419,14 +561,15 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 			//============================
 			count2++;
 			count3++;
-			if (count2 > 200)
+			if (count2 > 500)
 			{
 				State[0] = NewState[0];
 				State[0](0, 0) = 2000;
 				break;
 			}
-			if (count3 <= kk0 * N * (N - 1) / 2)
+			if (count3 <= kk0 * N * (N - 1) / 2) // change A
 			{
+				// d = mind; 
 				d(i, j) = bmin + (bmax - bmin) * rr.doub();
 				d(j, i) = d(i, j);
 				kk++;
@@ -444,8 +587,9 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 				}
 				NewState[0] = A(d);
 			}
-			else if (count3 <= kk0 * (N * (N - 1) / 2 + N))
+			else if (count3 <= kk0 * (N * (N - 1) / 2 + N)) // change B
 			{
+				// dd = mindd;
 				dd(ii, ii) = bmin + (bmax - bmin) * rr.doub();
 				ll++;
 				if (ll == kk0)
@@ -459,8 +603,9 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 				}
 				NewState[1] = B(dd);
 			}
-			else
+			else // change S
 			{
+				// ss = minss;
 				ss(jj, jj) = bmin + (bmax - bmin) * rr.doub();
 				nn++;
 				if (nn == kk0)

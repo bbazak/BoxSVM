@@ -54,6 +54,7 @@ GeneralizedSelfAdjointEigenSolver<MatrixXd> ges;
 MatrixXd Norm;
 MatrixXd H;
 VectorXd D;
+double EE;
 
 if (existBasis > 0) {
   cout << "\t Existing basis is used, with " << existBasis << " states." << endl;
@@ -77,7 +78,7 @@ if (existBasis > 0) {
     Basis.push_back(aState);
 	  svm.UpdateNorm(Basis);
 	  svm.UpdateHamiltonian(Basis);
-    if ((i+1)%5==0 && i>1) {
+    if (i==existBasis-1 || (i+1)%5==0 && i>1) {
       Norm = svm.NormMatrix(Basis);
       H    = svm.HamiltonianMatrix(Basis);
       ges.compute(H, Norm);
@@ -85,6 +86,7 @@ if (existBasis > 0) {
       double Ei = D.minCoeff();
       printf("\t iter = %4d     E = %14.8f",i+1,Ei);
       cout << endl;
+      if (i<existBasis-1) EE=Ei;
     }
   }
   infile.close();
@@ -106,14 +108,14 @@ if (existBasis > 0) {
 /* start SVM iterations */
 MatrixXd C;
 double E, maxE;
-double EE=0., maxEE;
+double maxEE;
 int n_accuracy=1;
 int n_dE=0;
 // GeneralizedSelfAdjointEigenSolver<MatrixXd> ges;
 SelfAdjointEigenSolver<MatrixXd> es;
 VectorXd esD;
 
-cout << "\t Starting SVM iterations" << endl << endl;
+cout << "\n\t Starting SVM iterations\n" << endl;
 while (itr < input.maxbasis) {
   svm.SaveToFile(basisFile,Basis);
   Norm = svm.NormMatrix(Basis);
@@ -123,8 +125,9 @@ while (itr < input.maxbasis) {
   D = ges.eigenvalues();
   E = D.minCoeff();
   maxE = D.maxCoeff();    
-  if (itr == 1 || itr==existBasis)  EE = E + abs(E / 2);
-  printf("\t iter = %4d     E = %14.8f \n",itr,E);
+  if (itr == 1)  EE = E + abs(E / 2);
+  if (itr > existBasis) printf("\t iter = %4d     E = %14.8f \n",itr,E);
+  fflush(stdout);
   for (int ntries=0; ntries<10; ntries++) {
     NewState = svm.NewState(Basis, C, D, E, EE);
     if (NewState[0](0, 0) != 2000) break;
