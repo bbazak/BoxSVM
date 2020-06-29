@@ -486,36 +486,6 @@ vector<MatrixXd> SVM::NewState(vector<vector<MatrixXd>> Basis, MatrixXd C, Vecto
 	count4 = 0;
 	double minE, NewE;
 
-	/*
-        int yy=0; 
-        int count0=0;
-        minE=E; NewE=E;
-	while (count0 <= mm0)
-	{
-		if (CheckOverlap(Basis) == 1)
-		{
-			NewE = NewEnergy(Basis, C, D, E, EE);
-			if (NewE < minE) 
-                        {
-                                yy=1;
-				minE = NewE;
-	                        State = NewState;                                         			
-		        }
-                }
-	        NewState[0]=A(Dmatrix());
-		Basis[Bsize] = NewState;
-		UpdateNorm(Basis);
-		UpdateHamiltonian(Basis);
-                count0++;
-	}
-        if(yy==1) 
-        {
-        Basis[Bsize] = State;
-	UpdateNorm(Basis);
-	UpdateHamiltonian(Basis);
-        }
-  */
-
 	while (count4 <= mm0)
 	{
 		i = 0;
